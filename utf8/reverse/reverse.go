@@ -48,6 +48,7 @@ func handleMultibyte(resString *strings.Builder, continuationCounter int, expect
 
 func Reverse(input string) string {
 	var resString strings.Builder
+	resString.Grow(len(input))
 
 	continuationCounter := 0
 	for i := len(input) - 1; i >= 0; i-- {
