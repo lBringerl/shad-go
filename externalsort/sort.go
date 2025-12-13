@@ -10,11 +10,10 @@ import (
 const ReadBufferSize = 100
 
 type LineReaderImpl struct {
-	reader       io.Reader
-	buffer       []byte
-	accBuffer    *[]byte
-	endOfLinePos *int
-	EOFError     *bool
+	reader    io.Reader
+	buffer    []byte
+	accBuffer []byte
+	EOFError  bool
 }
 
 func findEndOfLine(line []byte) int {
@@ -26,18 +25,14 @@ func findEndOfLine(line []byte) int {
 	return -1
 }
 
-func (r LineReaderImpl) ReadLine() (string, error) {
-	if len(*r.accBuffer) == 0 && *r.EOFError {
-		return "", io.EOF
-	}
-
-	endOfLineIdx := findEndOfLine((*r.accBuffer))
-	for endOfLineIdx == -1 && !*r.EOFError {
+func (r *LineReaderImpl) ReadLine() (string, error) {
+	endOfLineIdx := findEndOfLine(r.accBuffer)
+	for endOfLineIdx == -1 && !r.EOFError {
 		n, err := r.reader.Read(r.buffer)
 		if err != nil {
 			switch err {
 			case io.EOF:
-				*r.EOFError = true
+				r.EOFError = true
 			default:
 				return "", fmt.Errorf("r.reader.Read: %w", err)
 			}
@@ -45,36 +40,49 @@ func (r LineReaderImpl) ReadLine() (string, error) {
 
 		buffEndOfLineIdx := findEndOfLine(r.buffer[:n])
 		if buffEndOfLineIdx != -1 {
-			endOfLineIdx = len(*r.accBuffer) + buffEndOfLineIdx
+			endOfLineIdx = len(r.accBuffer) + buffEndOfLineIdx
 		}
-		*r.accBuffer = append(*r.accBuffer, r.buffer[:n]...)
+		r.accBuffer = append(r.accBuffer, r.buffer[:n]...)
 	}
 
-	if (endOfLineIdx == -1 || len(*r.accBuffer) == endOfLineIdx+1) && *r.EOFError {
-		res := string(*r.accBuffer)
-		*r.accBuffer = make([]byte, 0)
-
-		return res, io.EOF
+	if len(r.accBuffer) == 0 && r.EOFError {
+		return "", io.EOF
 	}
 
-	res := string((*r.accBuffer)[:endOfLineIdx])
-	*r.accBuffer = (*r.accBuffer)[endOfLineIdx+1:]
+	if r.EOFError {
+		switch endOfLineIdx {
+		case len(r.accBuffer) - 1:
+			res := string(r.accBuffer[:endOfLineIdx])
+			r.accBuffer = make([]byte, 0)
+			return res, nil
+		case -1:
+			res := string(r.accBuffer)
+			r.accBuffer = make([]byte, 0)
+			return res, io.EOF
+		default:
+		}
+	}
+
+	res := string(r.accBuffer[:endOfLineIdx])
+	r.accBuffer = r.accBuffer[endOfLineIdx+1:]
 
 	return res, nil
 }
 
 func NewReader(r io.Reader) LineReader {
-	initialEndOfLinePos := -1
-	accBuffer := make([]byte, 0)
-	isEOFErr := false
-	return LineReaderImpl{
-		reader:       r,
-		buffer:       make([]byte, ReadBufferSize),
-		accBuffer:    &accBuffer,
-		endOfLinePos: &initialEndOfLinePos,
-		EOFError:     &isEOFErr,
+	return &LineReaderImpl{
+		reader:    r,
+		buffer:    make([]byte, ReadBufferSize),
+		accBuffer: make([]byte, 0),
+		EOFError:  false,
 	}
 }
+
+// type LineWriterImpl struct {
+// 	writer io.Writer
+// }
+
+// func () Write(l string) error {}
 
 func NewWriter(w io.Writer) LineWriter {
 	panic("implement me")
