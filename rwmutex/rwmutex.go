@@ -12,12 +12,31 @@ package rwmutex
 // recursive read locking. This is to ensure that the lock eventually becomes
 // available; a blocked Lock call excludes new readers from acquiring the
 // lock.
+
+type LockType int
+
+const (
+	Reader LockType = iota
+	Writer
+)
+
 type RWMutex struct {
+	globalCh        chan struct{}
+	releaseWriterCh chan struct{}
+	writerLockCh    chan struct{}
+	counter         int
+	writerWaiting   bool
 }
 
 // New creates *RWMutex.
 func New() *RWMutex {
-	return nil
+	return &RWMutex{
+		globalCh:        make(chan struct{}, 1),
+		releaseWriterCh: make(chan struct{}),
+		writerLockCh:    make(chan struct{}, 1),
+		counter:         0,
+		writerWaiting:   false,
+	}
 }
 
 // RLock locks rw for reading.
@@ -26,7 +45,11 @@ func New() *RWMutex {
 // call excludes new readers from acquiring the lock. See the
 // documentation on the RWMutex type.
 func (rw *RWMutex) RLock() {
-
+	rw.writerLockCh <- struct{}{}
+	rw.globalCh <- struct{}{}
+	<-rw.writerLockCh
+	rw.counter++
+	<-rw.globalCh
 }
 
 // RUnlock undoes a single RLock call;
@@ -34,14 +57,31 @@ func (rw *RWMutex) RLock() {
 // It is a run-time error if rw is not locked for reading
 // on entry to RUnlock.
 func (rw *RWMutex) RUnlock() {
-
+	rw.globalCh <- struct{}{}
+	rw.counter--
+	switch {
+	case rw.counter == 0 && rw.writerWaiting:
+		rw.writerWaiting = false
+		rw.releaseWriterCh <- struct{}{}
+	case rw.counter < 0:
+		panic("reader unlock: tried to unlock already unlocked read lock\n")
+	}
+	<-rw.globalCh
 }
 
 // Lock locks rw for writing.
 // If the lock is already locked for reading or writing,
 // Lock blocks until the lock is available.
 func (rw *RWMutex) Lock() {
-
+	rw.writerLockCh <- struct{}{}
+	rw.globalCh <- struct{}{}
+	if rw.counter > 0 {
+		rw.writerWaiting = true
+		<-rw.globalCh
+		<-rw.releaseWriterCh
+		rw.globalCh <- struct{}{}
+	}
+	<-rw.globalCh
 }
 
 // Unlock unlocks rw for writing. It is a run-time error if rw is
@@ -51,5 +91,7 @@ func (rw *RWMutex) Lock() {
 // goroutine. One goroutine may RLock (Lock) a RWMutex and then
 // arrange for another goroutine to RUnlock (Unlock) it.
 func (rw *RWMutex) Unlock() {
-
+	rw.globalCh <- struct{}{}
+	<-rw.writerLockCh
+	<-rw.globalCh
 }
