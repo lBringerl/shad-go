@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  test:
+    image: golang:1.24
+    container_name: shad-go-linux-test
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      - GO111MODULE=on
+      - CGO_ENABLED=0
+    # /proc is accessible by default in Linux containers
+    # This allows testing fileleak which requires /proc/self/fd
+    # 
+    # Usage examples:
+    #   docker-compose -f docker-compose.linux-test.yml run --rm test go test ./fileleak -v
+    #   docker-compose -f docker-compose.linux-test.yml run --rm test go test ./fileleak -run TestName
+    #   docker-compose -f docker-compose.linux-test.yml run --rm test bash  # Interactive shell
+    stdin_open: true
+    tty: true
+
