@@ -1,7 +1,9 @@
 package iprange
 
 import (
+	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -169,4 +171,52 @@ func TestListExpansion(t *testing.T) {
 
 	expanded := rangeList.Expand()
 	assert.Len(t, expanded, 20)
+}
+
+func FuzzParse(f *testing.F) {
+	testcases := []string{"192.168.1.10", "192.168.1.1-20", "192.168.1.10/29"}
+	for _, tc := range testcases {
+		f.Add(tc)
+	}
+
+	f.Fuzz(func(t *testing.T, ip string) {
+		fmt.Printf("%s\n", ip)
+		ipRange, err := Parse(ip)
+		if err != nil {
+			t.Skip(ip)
+		}
+
+		minSplitted := strings.Split(ipRange.Min.String(), ".")
+		maxSplitted := strings.Split(ipRange.Max.String(), ".")
+
+		if len(minSplitted) != len(maxSplitted) {
+			t.Errorf("numbers count of %s != %s", ipRange.Min.String(), ipRange.Max.String())
+			t.FailNow()
+			return
+		}
+
+		if len(minSplitted) != 4 {
+			t.Errorf("number count of %s != 4", ipRange.Min.String())
+			t.FailNow()
+			return
+		}
+
+		newIP := fmt.Sprintf(
+			"%s-%s.%s-%s.%s-%s.%s-%s",
+			minSplitted[0], maxSplitted[0],
+			minSplitted[1], maxSplitted[1],
+			minSplitted[2], maxSplitted[2],
+			minSplitted[3], maxSplitted[3],
+		)
+		ipRange2, err := Parse(newIP)
+		if err != nil {
+			t.Skip()
+		}
+		if ipRange.Min.String() != ipRange2.Min.String() {
+			t.Errorf("ip range of Min %s != %s", ipRange.Min.String(), ipRange2.Min.String())
+		}
+		if ipRange.Max.String() != ipRange2.Max.String() {
+			t.Errorf("ip range of Max %s != %s", ipRange.Max.String(), ipRange2.Max.String())
+		}
+	})
 }

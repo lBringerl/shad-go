@@ -76,7 +76,6 @@ func (ip *ipLex) next() rune {
 	ip.line = ip.line[size:]
 	if c == utf8.RuneError && size == 1 {
 		log.Print("invalid utf8")
-		return ip.next()
 	}
 	return c
 }
